@@ -38,7 +38,7 @@ app.use("/admin", adminRouter);
 app.use("/users", userRouter);
 app.use("/events", eventRouter);
 
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 5001;
 const mongouri = process.env.ATLAS_URI;
 
 mongoose
