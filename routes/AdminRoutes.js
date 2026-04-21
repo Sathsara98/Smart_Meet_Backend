@@ -3,7 +3,7 @@ const router = express.Router();
 const axios = require("axios");
 const Question = require("../schemas/Question");
 const Minute = require("../schemas/Minute");
-const auth = require("../Authentication/Auth");
+const auth = require("../authentication/Auth");
 
 const Event = require("../schemas/Event");
 
