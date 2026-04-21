@@ -143,20 +143,28 @@ router.get("/register", function (req, res, next) {
   });
 });
 
-router.post("/getMeetings", function (req, res, next) {
-  console.log("getnot called" + req.body.id);
-  if (!req.body.id) {
-    return res.json({ error: "No ID" });
+router.post("/getMeetings", async function (req, res, next) {
+  try {
+    console.log("getMeetings called:", req.body.id);
+
+    if (!req.body.id) {
+      return res.json({ error: "No ID" });
+    }
+
+    const events = await Event.find({}).select("name time date members");
+
+    const userMeetings = events.filter((event) =>
+      Array.isArray(event.members) &&
+      event.members.some(
+        (member) => member && String(member._id) === String(req.body.id)
+      )
+    );
+
+    res.send(userMeetings);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Failed to load meetings" });
   }
-  Event.find({
-    members: {
-      $elemMatch: { _id: req.body.id },
-    },
-  })
-    .select("name time date")
-    .then(function (item) {
-      res.send(item);
-    });
 });
 
 router.get("/usersnat", function (req, res, next) {
@@ -214,7 +222,7 @@ router.post("/login", async function (req, res) {
   if (user) {
     // Generate an access token
     const accessToken = jwt.sign(
-      { id: user._id, role: user.utype },
+      { id: user._id, role: user.utype, name: user.name },
       accessTokenSecret
     );
 
