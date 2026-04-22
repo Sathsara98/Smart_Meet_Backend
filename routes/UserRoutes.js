@@ -11,6 +11,48 @@ const User = require("../schemas/User");
 const Event = require("../schemas/Event");
 //JWT
 const accessTokenSecret = process.env.TOKEN_SECRET;
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
+const SENDGRID_FROM_EMAIL = process.env.FROM_EMAIL;
+const SENDGRID_FROM_NAME = "Trade Ministry Sri Lanka";
+
+function buildEmailHtml(data) {
+  return data
+    .map((item) => `<p><strong>${item.field || ""}</strong> ${item.value || ""}</p>`)
+    .join("");
+}
+
+function sendEmailViaSendGrid(receiver, subject, data) {
+  if (!SENDGRID_API_KEY) {
+    console.error("Missing SENDGRID_API_KEY. Skipping email send.");
+    return Promise.resolve();
+  }
+
+  return axios.post(
+    SENDGRID_ENDPOINT,
+    {
+      personalizations: [
+        {
+          to: [{ email: receiver }],
+          subject,
+        },
+      ],
+      from: { email: SENDGRID_FROM_EMAIL, name: SENDGRID_FROM_NAME },
+      content: [
+        {
+          type: "text/html",
+          value: buildEmailHtml(data),
+        },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
 
 router.post("/register", async function (req, res, next) {
   const validEmail = await User.findOne({ email: req.body.email });
@@ -37,67 +79,53 @@ router.post("/register", async function (req, res, next) {
     })
     .catch(next);
 
-  axios
-    .post("https://form-to-email-api.herokuapp.com/api/email", {
-      name: "Trade Ministry Sri Lanka",
-      receiver: req.body.email,
-      subject: "Registration Successful! - Trade Ministry MMS",
-      data: [
-        {
-          field:
-            "Hi, " +
-            req.body.name +
-            " you have been regsitered as a " +
-            req.body.utype +
-            "  in Trade Ministry Sri Lanka MMS.",
-          value: "Use the following credentials to login to the System",
-        },
-        {
-          field: "Username :",
-          value: req.body.email,
-        },
-        {
-          field: "password",
-          value: password,
-        },
-        {
-          field: "Thank You!",
-          value: "",
-        },
-      ],
-    })
-    .then((res) => {
-      console.log(`statusCode: ${res.statusCode}`);
-      console.log(res);
+  sendEmailViaSendGrid(req.body.email, "Registration Successful! - Trade Ministry MMS", [
+    {
+      field:
+        "Hi, " +
+        req.body.name +
+        " you have been regsitered as a " +
+        req.body.utype +
+        "  in Trade Ministry Sri Lanka MMS.",
+      value: "Use the following credentials to login to the System",
+    },
+    {
+      field: "Username :",
+      value: req.body.email,
+    },
+    {
+      field: "password",
+      value: password,
+    },
+    {
+      field: "Thank You!",
+      value: "",
+    },
+  ])
+    .then((response) => {
+      console.log(`SendGrid status: ${response.status}`);
     })
     .catch((error) => {
-      console.error(error);
+      console.error(error.response?.data || error.message);
     });
 });
 
 router.get("/email", function (req, res, next) {
-  axios
-    .post("https://form-to-email-api.herokuapp.com/api/email", {
-      name: "PavanS",
-      receiver: "ushansankalpafernando@gmail.com",
-      subject: "Test mail",
-      data: [
-        {
-          field: "Age",
-          value: "21",
-        },
-        {
-          field: "Favourite food",
-          value: "Noodles",
-        },
-      ],
-    })
-    .then((res) => {
-      console.log(`statusCode: ${res.statusCode}`);
-      console.log(res);
+  sendEmailViaSendGrid("test.email@gmail.com", "Test mail", [
+    {
+      field: "Age",
+      value: "21",
+    },
+    {
+      field: "Favourite food",
+      value: "Noodles",
+    },
+  ])
+    .then((response) => {
+      console.log(`SendGrid status: ${response.status}`);
     })
     .catch((error) => {
-      console.error(error);
+      console.error(error.response?.data || error.message);
     });
 });
 
@@ -112,28 +140,21 @@ router.post("/forget", async function (req, res, next) {
     res.json(user);
   });
 
-  axios
-    .post("https://form-to-email-api.herokuapp.com/api/email", {
-      name: "Trade Ministry Sri Lanka",
-      receiver: req.body.email,
-      subject: "Your Password Has been reset",
-      data: [
-        {
-          field: "Use Your New Password to login to the system",
-          value: passNew,
-        },
-        {
-          field: "Thank You!",
-          value: "This is System Generated Email Please Do not Reply",
-        },
-      ],
-    })
-    .then((res) => {
-      console.log(`statusCode: ${res.statusCode}`);
-      console.log(res);
+  sendEmailViaSendGrid(req.body.email, "Your Password Has been reset", [
+    {
+      field: "Use Your New Password to login to the system",
+      value: passNew,
+    },
+    {
+      field: "Thank You!",
+      value: "This is System Generated Email Please Do not Reply",
+    },
+  ])
+    .then((response) => {
+      console.log(`SendGrid status: ${response.status}`);
     })
     .catch((error) => {
-      console.error(error);
+      console.error(error.response?.data || error.message);
     });
 });
 

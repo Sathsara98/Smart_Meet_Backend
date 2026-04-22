@@ -3,6 +3,48 @@ const router = express.Router();
 const axios = require("axios");
 const Event = require("../schemas/Event");
 const auth = require("../Authentication/Auth");
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
+const SENDGRID_FROM_EMAIL = process.env.FROM_EMAIL;
+const SENDGRID_FROM_NAME = "Trade Ministry Sri Lanka";
+
+function buildEmailHtml(data) {
+  return data
+    .map((item) => `<p><strong>${item.field || ""}</strong> ${item.value || ""}</p>`)
+    .join("");
+}
+
+function sendEmailViaSendGrid(receiver, subject, data) {
+  if (!SENDGRID_API_KEY) {
+    console.error("Missing SENDGRID_API_KEY. Skipping email send.");
+    return Promise.resolve();
+  }
+
+  return axios.post(
+    SENDGRID_ENDPOINT,
+    {
+      personalizations: [
+        {
+          to: [{ email: receiver }],
+          subject,
+        },
+      ],
+      from: { email: SENDGRID_FROM_EMAIL, name: SENDGRID_FROM_NAME },
+      content: [
+        {
+          type: "text/html",
+          value: buildEmailHtml(data),
+        },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
 
 router.post("/new", function (req, res, next) {
   Event.create({
@@ -48,46 +90,38 @@ function sendEventNotification(
   meeting
 ) {
   console.log("send email" + email);
-  axios
-    .post("https://form-to-email-api.herokuapp.com/api/email", {
-      name: "Trade Ministry Sri Lanka",
-      receiver: email,
-      subject: "You have an Upcoming Meeting",
-      data: [
-        {
-          field: "Dear " + userName + " ,",
-          value:
-            "You Have been assigned to a meeting, Meeting Details are following",
-        },
-        {
-          field: "Meeting Topic : " + meeting,
-          value:
-            "Date : " +
-            date +
-            "<br/>" +
-            "Time : " +
-            time +
-            "<br/>" +
-            "Venue : " +
-            location,
-        },
+  sendEmailViaSendGrid(email, "You have an Upcoming Meeting", [
+    {
+      field: "Dear " + userName + " ,",
+      value: "You Have been assigned to a meeting, Meeting Details are following",
+    },
+    {
+      field: "Meeting Topic : " + meeting,
+      value:
+        "Date : " +
+        date +
+        "<br/>" +
+        "Time : " +
+        time +
+        "<br/>" +
+        "Venue : " +
+        location,
+    },
 
-        {
-          field: "Navigate With Google Maps ",
-          value: '<a href="' + locationUrl + '"> Click Here </a>',
-        },
-        {
-          field: "Thank You!",
-          value: "This is System Generated Email Please Don't Reply!",
-        },
-      ],
-    })
-    .then((res) => {
-      console.log(`statusCode: ${res.statusCode}`);
-      // console.log(res);
+    {
+      field: "Navigate With Google Maps ",
+      value: '<a href="' + locationUrl + '"> Click Here </a>',
+    },
+    {
+      field: "Thank You!",
+      value: "This is System Generated Email Please Don't Reply!",
+    },
+  ])
+    .then((response) => {
+      console.log(`SendGrid status: ${response.status}`);
     })
     .catch((error) => {
-      console.error(error);
+      console.error(error.response?.data || error.message);
     });
 }
 
