@@ -55,60 +55,93 @@ function sendEmailViaSendGrid(receiver, subject, data) {
 }
 
 router.post("/register", async function (req, res, next) {
-  const validEmail = await User.findOne({ email: req.body.email });
-  if (validEmail) {
-    return res.json({
-      error: "This Email is already registered in the system",
+  try {
+    const email = req.body.email.toLowerCase().trim();
+    const nic = req.body.nic.toUpperCase().trim();
+
+
+    // Check duplicate email or NIC
+    const existingUser = await User.findOne({
+      $or: [{ email: email }, { nic: nic }],
+    });
+
+
+    if (existingUser) {
+      if (existingUser.email === email) {
+        return res.json({
+          error: "This Email is already registered in the system",
+        });
+      }
+
+
+      if (existingUser.nic === nic) {
+        return res.json({
+          error: "This NIC is already registered in the system",
+        });
+      }
+    }
+
+
+    const password = genPassword();
+
+
+    User.create({
+      utype: req.body.utype,
+      name: req.body.name,
+      nic: nic,
+      email: email,
+      tel: req.body.tel,
+      sector: req.body.sector,
+      workplace: req.body.workplace,
+      gender: req.body.gender,
+      password: password,
+    })
+      .then(function (item) {
+        res.send(item);
+      })
+      .catch(next);
+
+
+    sendEmailViaSendGrid(email, "SmartMeet - Registration Successful!", [
+      {
+        field:
+          "Hi, " +
+          req.body.name +
+          " you have been registered as a " +
+          req.body.utype +
+          " in SmartMeet.",
+        value: "Use the following credentials to login to the System",
+      },
+      {
+        field: "Username :",
+        value: email,
+      },
+      {
+        field: "Password :",
+        value: password,
+      },
+      {
+        field: "Thank You!",
+        value: "",
+      },
+    ])
+      .then((response) => {
+        console.log(`SendGrid status: ${response.status}`);
+      })
+      .catch((error) => {
+        console.error(error.response?.data || error.message);
+      });
+  } catch (error) {
+    console.log(error);
+    res.json({
+      error: "Something went wrong while registering member",
     });
   }
-
-  const password = genPassword();
-
-  User.create({
-    utype: req.body.utype,
-    name: req.body.name,
-    email: req.body.email,
-    tel: req.body.tel,
-    sector: req.body.sector,
-    workplace: req.body.workplace,
-    gender: req.body.gender,
-    password: password,
-  })
-    .then(function (item) {
-      res.send(item);
-    })
-    .catch(next);
-
-  sendEmailViaSendGrid(req.body.email, "SmartMeet - Registration Successful!", [
-    {
-      field:
-        "Hi, " +
-        req.body.name +
-        " you have been regsitered as a " +
-        req.body.utype +
-        "  in SmartMeet.",
-      value: "Use the following credentials to login to the System",
-    },
-    {
-      field: "Username :",
-      value: req.body.email,
-    },
-    {
-      field: "Password :",
-      value: password,
-    },
-    {
-      field: "Thank You!",
-      value: "",
-    },
-  ])
-    .then((response) => {
-      console.log(`SendGrid status: ${response.status}`);
-    })
-    .catch((error) => {
-      console.error(error.response?.data || error.message);
-    });
 });
+
+
+
+
 
 router.get("/email", function (req, res, next) {
   sendEmailViaSendGrid("test.email@gmail.com", "Test mail", [
@@ -374,6 +407,7 @@ router.put("/register", function (req, res, next) {
     { _id: req.body.id },
     {
       name: req.body.name,
+      nic: req.body.nic.toUpperCase().trim(),
       email: req.body.email,
       tel: req.body.tel,
       sector: req.body.sector,
