@@ -106,11 +106,15 @@ function sendEventNotification(
   sendEmailViaSendGrid(email, "You have an Upcoming Meeting", [
     {
       field: "Dear " + userName + " ,",
+    },
+    {
+
       value: "You Have been assigned to a meeting, Meeting Details are following",
     },
     {
       field: "Meeting Topic : " + meeting,
       value:
+        "<br/>" +
         "Date : " +
         date +
         "<br/>" +
