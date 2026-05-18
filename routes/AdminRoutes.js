@@ -230,6 +230,77 @@ router.post("/new-minute", async function (req, res, next) {
       rating_completed: false,
     });
 
+
+
+    const Notification = require("../schemas/Notification");
+
+    // Get meeting details
+    const meeting = await Event.findById(item.meeting_id);
+
+    if (meeting && Array.isArray(meeting.members)) {
+
+      // Present member names from minute
+      const presentMembers = [
+
+        ...(item.present_private || []),
+        ...(item.present_public || []),
+        ...(item.present_academic || []),
+        ...(item.present_association || [])
+
+      ];
+
+      // remove duplicates
+      const uniquePresentMembers = [...new Set(presentMembers)];
+
+      // Match meeting users with present users
+      const presentUsers = meeting.members.filter(member =>
+        uniquePresentMembers.includes(member.name)
+      );
+
+      for (const member of presentUsers) {
+
+        const userId =
+          member._id ||
+          member.userId ||
+          member.id;
+
+        if (userId) {
+
+          // Minutes created notification
+          await Notification.create({
+
+            userId: userId,
+            meetingId: item.meeting_id,
+            minuteId: item._id,
+            type: "MINUTES_CREATED",
+
+            message:
+              `Minutes have been created for ${item.meeting_name}`,
+
+            isRead: false
+          });
+
+
+          // Rating pending notification
+          await Notification.create({
+
+            userId: userId,
+            meetingId: item.meeting_id,
+            minuteId: item._id,
+            type: "RATING_PENDING",
+
+            message:
+              "You have not completed your meeting activity ratings",
+
+            isRead: false
+          });
+
+        }
+      }
+    }
+
+
+
     res.send(item);
   } catch (error) {
     console.log(error);

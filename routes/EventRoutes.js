@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const Event = require("../schemas/Event");
+const Notification = require("../schemas/Notification");
 const auth = require("../authentication/Auth");
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
@@ -61,7 +62,7 @@ router.post("/new", async function (req, res) {
     });
 
     if (Array.isArray(req.body.members)) {
-      req.body.members.forEach((i) => {
+      for (const i of req.body.members) {
         if (i.email) {
           sendEventNotification(
             i.name,
@@ -73,7 +74,17 @@ router.post("/new", async function (req, res) {
             req.body.name
           );
         }
-      });
+        const userId = i.userId || i._id || i.id || null;
+        if (userId) {
+          await Notification.create({
+            userId: userId,
+            meetingId: newEvent._id,
+            type: "NEW_MEETING_ASSIGNED",
+            message: `You have been assigned to a meeting: ${req.body.name} on ${req.body.date} at ${req.body.time}`,
+            isRead: false,
+          });
+        }
+      };
     }
 
     return res.status(201).json(newEvent);
@@ -141,5 +152,42 @@ function sendEventNotification(
       console.error(error.response?.data || error.message);
     });
 }
+
+router.post("/create-reminders", async function (req, res) {
+  try {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+
+    const tomorrow = today.toISOString().split("T")[0];
+
+    const meetings = await Event.find({ date: tomorrow });
+
+    for (const meeting of meetings) {
+      if (Array.isArray(meeting.members)) {
+        for (const member of meeting.members) {
+          const userId = member._id || member.id || member.userID;
+
+          if (userId) {
+            await Notification.create({
+              userId: userId,
+              meetingId: meeting._id,
+              type: "MEETING_REMINDER",
+              message: `Reminder: You have a meeting scheduled: ${meeting.name} on ${meeting.date} at ${meeting.time}.`,
+            });
+          }
+        }
+      }
+    }
+
+    res.send({
+      success: true,
+      message: "Meeting reminder notifications created",
+    });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
+
 
 module.exports = router;

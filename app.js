@@ -44,6 +44,11 @@ app.use("/questions", questionRoutes);
 const port = process.env.PORT || 5001;
 const mongouri = process.env.ATLAS_URI;
 
+const notificationRoutes = require("./routes/NotificationRoutes");
+app.use("/notifications", notificationRoutes);
+
+
+
 mongoose
   .connect(mongouri, {
     useNewUrlParser: true,
