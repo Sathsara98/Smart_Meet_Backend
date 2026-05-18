@@ -19,6 +19,7 @@ const event = new Schema({
   date: {
     type: String,
   },
+
 });
 
 const Event = mongoose.model("events", event);

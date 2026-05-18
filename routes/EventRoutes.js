@@ -188,6 +188,68 @@ router.post("/create-reminders", async function (req, res) {
   }
 });
 
+router.put("/unable-to-attend/:meetingId/:userId", async function (req, res) {
+  try {
+    const { meetingId, userId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim() === "") {
+      return res.status(400).json({
+        error: "Reason is required",
+      });
+    }
+
+    const meeting = await Event.findById(meetingId);
+
+    if (!meeting) {
+      return res.status(404).json({
+        error: "Meeting not found",
+      });
+    }
+
+    const memberIndex = meeting.members.findIndex(
+      (m) =>
+        String(m.userId) === String(userId) ||
+        String(m._id) === String(userId) ||
+        String(m.id) === String(userId)
+    );
+
+    if (memberIndex === -1) {
+      return res.status(404).json({
+        error: "Member not found in this meeting",
+      });
+    }
+
+    if (meeting.members[memberIndex].unableToAttend === true) {
+      return res.status(400).json({
+        error: "Already submitted for unable to attend",
+      });
+    }
+
+    meeting.members[memberIndex].unableToAttend = true;
+    meeting.members[memberIndex].unableReason = reason;
+    meeting.members[memberIndex].attendanceStatus = "UNABLE_TO_ATTEND";
+
+    meeting.markModified("members");
+
+    await meeting.save();
+
+    return res.json({
+      success: true,
+      message: "Unable to attend reason saved successfully",
+      member: meeting.members[memberIndex],
+    });
+  } catch (error) {
+    console.error("Unable to attend error:", error);
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+
+
+
 
 
 module.exports = router;
