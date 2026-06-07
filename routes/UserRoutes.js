@@ -1,33 +1,56 @@
 const express = require("express");
+
 const auth = require("../authentication/Auth");
+
 const router = express.Router();
+
+// Import JWT for login token generation
 const jwt = require("jsonwebtoken");
+
+// Parse request body data
 const bodyParser = require("body-parser");
+
+// Load environment variables from .env file
 require("dotenv").config();
+
+// File system module for deleting old images
 const fs = require("fs");
+
+// Axios used to call SendGrid email API
 const axios = require("axios");
-//DB models
+
+// Database models
 const User = require("../schemas/User");
 const Event = require("../schemas/Event");
-//JWT
+
+// Secret key used to generate JWT tokens
 const accessTokenSecret = process.env.TOKEN_SECRET;
+
+// SendGrid email configuration
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send";
 const SENDGRID_FROM_EMAIL = process.env.FROM_EMAIL;
 const SENDGRID_FROM_NAME = "SmartMeet";
 
+
+// Converts email content into HTML format
 function buildEmailHtml(data) {
   return data
     .map((item) => `<p><strong>${item.field || ""}</strong> ${item.value || ""}</p>`)
     .join("");
 }
 
+
+// Sends email through SendGrid API
 function sendEmailViaSendGrid(receiver, subject, data) {
+
+  // Stop if API key is missing
   if (!SENDGRID_API_KEY) {
     console.error("Missing SENDGRID_API_KEY. Skipping email send.");
     return Promise.resolve();
   }
 
+  // Call SendGrid API
   return axios.post(
     SENDGRID_ENDPOINT,
     {
@@ -37,7 +60,10 @@ function sendEmailViaSendGrid(receiver, subject, data) {
           subject,
         },
       ],
-      from: { email: SENDGRID_FROM_EMAIL, name: SENDGRID_FROM_NAME },
+      from: {
+        email: SENDGRID_FROM_EMAIL,
+        name: SENDGRID_FROM_NAME
+      },
       content: [
         {
           type: "text/html",
@@ -54,25 +80,32 @@ function sendEmailViaSendGrid(receiver, subject, data) {
   );
 }
 
+
+// =======================================
+// REGISTER NEW USER
+// =======================================
 router.post("/register", async function (req, res, next) {
   try {
+
+    // Convert email to lowercase
     const email = req.body.email.toLowerCase().trim();
+
+    // Convert NIC to uppercase
     const nic = req.body.nic.toUpperCase().trim();
 
-
-    // Check duplicate email or NIC
+    // Check whether email or NIC already exists
     const existingUser = await User.findOne({
       $or: [{ email: email }, { nic: nic }],
     });
 
-
+    // Return duplicate error
     if (existingUser) {
+
       if (existingUser.email === email) {
         return res.json({
           error: "This Email is already registered in the system",
         });
       }
-
 
       if (existingUser.nic === nic) {
         return res.json({
@@ -81,10 +114,10 @@ router.post("/register", async function (req, res, next) {
       }
     }
 
-
+    // Generate random password
     const password = genPassword();
 
-
+    // Save user into MongoDB
     User.create({
       utype: req.body.utype,
       name: req.body.name,
@@ -95,22 +128,17 @@ router.post("/register", async function (req, res, next) {
       workplace: req.body.workplace,
       gender: req.body.gender,
       password: password,
-    })
-      .then(function (item) {
-        res.send(item);
-      })
-      .catch(next);
+    });
 
-
+    // Send login credentials to email
     sendEmailViaSendGrid(email, "SmartMeet - Registration Successful!", [
       {
         field:
           "Hi, " +
           req.body.name +
           " you have been registered as a " +
-          req.body.utype +
-          " in SmartMeet.",
-        value: "Use the following credentials to login to the System",
+          req.body.utype,
+        value: "Use the following credentials to login",
       },
       {
         field: "Username :",
@@ -120,19 +148,13 @@ router.post("/register", async function (req, res, next) {
         field: "Password :",
         value: password,
       },
-      {
-        field: "Thank You!",
-        value: "",
-      },
-    ])
-      .then((response) => {
-        console.log(`SendGrid status: ${response.status}`);
-      })
-      .catch((error) => {
-        console.error(error.response?.data || error.message);
-      });
+    ]);
+
   } catch (error) {
+
+    // Handle registration errors
     console.log(error);
+
     res.json({
       error: "Something went wrong while registering member",
     });
@@ -140,73 +162,91 @@ router.post("/register", async function (req, res, next) {
 });
 
 
-
-
-
-router.get("/email", function (req, res, next) {
-  sendEmailViaSendGrid("test.email@gmail.com", "Test mail", [
-    {
-      field: "Age",
-      value: "21",
-    },
-    {
-      field: "Favourite food",
-      value: "Noodles",
-    },
-  ])
-    .then((response) => {
-      console.log(`SendGrid status: ${response.status}`);
-    })
-    .catch((error) => {
-      console.error(error.response?.data || error.message);
-    });
-});
-
-//Forget Password
+// =======================================
+// FORGET PASSWORD
+// =======================================
 router.post("/forget", async function (req, res, next) {
-  // const user = User.findOneAndUpdate({ email: req.body.email });
+
+  // Generate new password
   const passNew = genPassword();
+
+  // Update password in database
   User.findOneAndUpdate(
     { email: req.body.email },
     { $set: { password: passNew } }
-  ).then((user) => {
-    res.json(user);
-  });
+  );
 
-  sendEmailViaSendGrid(req.body.email, "Your Password Has been reset", [
-    {
-      field: "Use Your New Password to login to the system",
-      value: passNew,
-    },
-    {
-      field: "Thank You!",
-      value: "This is System Generated Email Please Do not Reply",
-    },
-  ])
-    .then((response) => {
-      console.log(`SendGrid status: ${response.status}`);
-    })
-    .catch((error) => {
-      console.error(error.response?.data || error.message);
-    });
+  // Send new password to user email
+  sendEmailViaSendGrid(
+    req.body.email,
+    "Your Password Has been reset",
+    [
+      {
+        field: "Use Your New Password",
+        value: passNew,
+      },
+    ]
+  );
 });
 
+
+
+router.get("/register/:type", async function (req, res) {
+  try {
+    const type = req.params.type;
+
+
+    let sector = "";
+
+
+    if (type === "public") sector = "Public";
+    else if (type === "private") sector = "Private";
+    else if (type === "academic") sector = "Academic";
+    else if (type === "association") sector = "Association";
+
+
+    const members = await User.find({ sector: sector });
+
+
+    res.json(members);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to load members",
+    });
+  }
+});
+
+
+
+// =======================================
+// GET ALL USERS
+// =======================================
 router.get("/register", function (req, res, next) {
+
+  // Return all users
   User.find({}).then(function (item) {
     res.send(item);
   });
 });
 
-router.post("/getMeetings", async function (req, res, next) {
-  try {
-    console.log("getMeetings called:", req.body.id);
 
+// =======================================
+// GET USER'S MEETINGS
+// =======================================
+router.post("/getMeetings", async function (req, res, next) {
+
+  try {
+
+    // Check user id exists
     if (!req.body.id) {
       return res.json({ error: "No ID" });
     }
 
-    const events = await Event.find({}).select("name time date members");
+    // Get all meetings
+    const events = await Event.find({})
+      .select("name time date members");
 
+    // Filter meetings assigned to user
     const userMeetings = events.filter((event) =>
       Array.isArray(event.members) &&
       event.members.some(
@@ -214,117 +254,84 @@ router.post("/getMeetings", async function (req, res, next) {
       )
     );
 
+    // Return meetings
     res.send(userMeetings);
+
   } catch (error) {
+
     console.log(error);
-    res.status(500).json({ error: "Failed to load meetings" });
+
+    res.status(500).json({
+      error: "Failed to load meetings"
+    });
   }
 });
 
-router.get("/usersnat", function (req, res, next) {
-  User.find({})
-    .select("_id name email sector nat utype userImage gender")
-    .then(function (item) {
-      res.send(item);
-    });
-});
 
-router.get("/register/public", function (req, res, next) {
-  User.find({ sector: "Public" }).then(function (item) {
-    res.send(item);
-  });
-});
-
-router.get("/register/private", function (req, res, next) {
-  User.find({ sector: "Private" }).then(function (item) {
-    res.send(item);
-  });
-});
-
-router.get("/register/association", function (req, res, next) {
-  User.find({ sector: "Association" }).then(function (item) {
-    res.send(item);
-  });
-});
-
-router.get("/register/academic", function (req, res, next) {
-  User.find({ sector: "Academic" }).then(function (item) {
-    res.send(item);
-  });
-});
-router.get("/register/:Cid", auth, function (req, res, next) {
-  const userId = req.params.Cid;
-  User.findOne({ _id: userId }).then(function (item) {
-    res.send(item);
-  });
-});
-
-router.delete("/delete", auth, function (req, res, next) {
-  User.findByIdAndRemove({
-    _id: req.body.id,
-  }).then(function (item) {
-    res.send(item);
-  });
-});
-
+// =======================================
+// LOGIN
+// =======================================
 router.post("/login", async function (req, res) {
+
+  // Find matching email and password
   const user = await User.findOne({
     email: req.body.email,
     password: req.body.password,
   });
 
   if (user) {
-    // Generate an access token
+
+    // Generate JWT token
     const accessToken = jwt.sign(
-      { id: user._id, role: user.utype, name: user.name },
+      {
+        id: user._id,
+        role: user.utype,
+        name: user.name,
+      },
       accessTokenSecret
     );
 
+    // Send token to frontend
     res.json({
       accessToken,
     });
+
   } else {
-    res.json({ error: "Username or password incorrect" });
+
+    // Invalid credentials
+    res.json({
+      error: "Username or password incorrect"
+    });
   }
 });
 
-router.put("/nat", function (req, res, next) {
-  User.findByIdAndUpdate(
-    { _id: req.body.id },
-    {
-      nat: req.body.nat,
-    }
-  ).then(function () {
-    User.findOne({ _id: req.body.id }).then(function (single) {
-      res.send(single);
-    });
-  });
-});
+
+// =======================================
+// SYSTEM STATISTICS
+// =======================================
 router.get("/stats", async function (req, res, next) {
-  // const { role } = req.user;
 
-  // if (role !== "admin") {
-  //   return res.sendStatus(403);
-  // }
-  let publicCount = 0;
-  let privateCount = 0;
-  let academicCount = 0;
-  let associationCount = 0;
-  publicCount = await User.find({ sector: "Public" }).then(function (item) {
-    return item.length;
-  });
-  privateCount = await User.find({ sector: "Private" }).then(function (item) {
-    return item.length;
-  });
-  academicCount = await User.find({ sector: "Academic" }).then(function (item) {
-    return item.length;
-  });
-  associationCount = await User.find({ sector: "Association" }).then(function (
-    item
-  ) {
-    return item.length;
-  });
+  // Count Public members
+  let publicCount = await User.find({
+    sector: "Public"
+  }).then((item) => item.length);
 
+  // Count Private members
+  let privateCount = await User.find({
+    sector: "Private"
+  }).then((item) => item.length);
+
+  // Count Academic members
+  let academicCount = await User.find({
+    sector: "Academic"
+  }).then((item) => item.length);
+
+  // Count Association members
+  let associationCount = await User.find({
+    sector: "Association"
+  }).then((item) => item.length);
+
+  // Return counts
   res.json({
     Public: publicCount,
     Private: privateCount,
@@ -333,76 +340,113 @@ router.get("/stats", async function (req, res, next) {
   });
 });
 
+
+// =======================================
+// GENERATE RANDOM PASSWORD
+// =======================================
 function genPassword() {
+
+  // Stores generated password
   var result = "";
+
+  // Allowed characters
   var characters =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  var charactersLength = characters.length;
+
+  // Create 8-character password
   for (var i = 0; i < 8; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    result += characters.charAt(
+      Math.floor(Math.random() * characters.length)
+    );
   }
+
   return result;
 }
-//User image upload
+
+
+// =======================================
+// IMAGE UPLOAD CONFIGURATION
+// =======================================
+
+// Multer package for file uploads
 const multer = require("multer");
 
+// Upload folder configuration
 const storage = multer.diskStorage({
+
   destination: function (req, file, cb) {
+
+    // Save inside uploads folder
     cb(null, "./uploads/");
   },
+
   filename: function (req, file, cb) {
+
+    // Save unique file name
     cb(null, Date.now() + file.originalname);
   },
 });
 
+
+// Accept only image files
 const Imagfilter = (req, file, cb) => {
+
   if (
     file.mimetype === "image/jpeg" ||
     file.mimetype === "image/png" ||
     file.mimetype === "image/jpg"
   ) {
+
     cb(null, true);
+
   } else {
+
     cb(null, false);
   }
 };
 
+
+// Upload middleware
 const ImageUpload = multer({
   storage: storage,
-  limits: { fileSize: 8194304 },
+  limits: { fileSize: 8194304 }, // 8MB
   fileFilter: Imagfilter,
 });
+
+
+// =======================================
+// UPDATE USER PROFILE IMAGE
+// =======================================
 router.put(
   "/user-image",
   ImageUpload.fields([{ name: "userImg", maxCount: 1 }]),
   (req, res, next) => {
+
+    // Delete previous image if exists
     if (req.body.previousImg != "") {
-      console.log("./" + req.body.previousImg);
+
       fs.unlink("./" + req.body.previousImg, function (res) {
         console.log("Previous image deleted");
       });
     }
+
+    // Save new image path in database
     User.findByIdAndUpdate(
       { _id: req.body.userID },
       {
-        userImage: req.files["userImg"][0].path.replace("\\", "/"),
+        userImage:
+          req.files["userImg"][0].path.replace("\\", "/"),
       }
-    )
-      .then(function () {
-        User.findOne({ _id: req.body.userID }).then(function (single) {
-          res.setTimeout(1500, function () {
-            res.send(single);
-          });
-        });
-      })
-      .catch((error) => {
-        res.send(error);
-        console.log(error);
-      });
+    );
   }
 );
-//user profile update
+
+
+// =======================================
+// UPDATE USER PROFILE DETAILS
+// =======================================
 router.put("/register", function (req, res, next) {
+
   User.findByIdAndUpdate(
     { _id: req.body.id },
     {
@@ -414,18 +458,25 @@ router.put("/register", function (req, res, next) {
       workplace: req.body.workplace,
       password: req.body.password,
     }
-  ).then(function () {
-    User.findOne({ _id: req.body.id }).then(function (single) {
-      res.send(single);
-    });
-  });
+  );
+
 });
 
-//Find user id from name
+
+// =======================================
+// GET USER BY ID
+// =======================================
 router.post("/register/user", function (req, res, next) {
-  User.find({ _id: req.body.id }).then(function (item) {
+
+  User.find({
+    _id: req.body.id,
+  }).then(function (item) {
+
     res.send(item);
   });
 });
 
+
+// Export routes to app.js
 module.exports = router;
+

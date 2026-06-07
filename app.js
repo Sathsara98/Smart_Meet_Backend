@@ -47,7 +47,14 @@ const mongouri = process.env.ATLAS_URI;
 const notificationRoutes = require("./routes/NotificationRoutes");
 app.use("/notifications", notificationRoutes);
 
+const sendMeetingReminderNotifications = require("./helpers/meetingReminderHelper");
 
+setInterval(() => {
+  sendMeetingReminderNotifications();
+},
+  60 * 60 * 1000); // Check every hour
+
+sendMeetingReminderNotifications(); // Run once at startup
 
 mongoose
   .connect(mongouri, {

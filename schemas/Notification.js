@@ -30,6 +30,13 @@ const notification = new Schema({
     isRead: {
         type: Boolean,
         default: false
+    },
+
+    //prevent duplicate notifications for the same meeting and type
+    uniqueKey: {
+        type: String,
+        required: true,
+        unique: true
     }
 }, { timestamps: true });
 
