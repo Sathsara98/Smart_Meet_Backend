@@ -6,6 +6,9 @@ const express = require("express");
 // WHY: Routes related to events/meetings are grouped here.
 const router = express.Router();
 
+const multer = require("multer");
+const path = require("path");
+
 // Import axios.
 // Axios is used to call SendGrid email API.
 const axios = require("axios");
@@ -21,6 +24,23 @@ const Notification = require("../schemas/Notification");
 // Import Auth.
 // In this file, auth is imported but not actively used.
 const auth = require("../authentication/Auth");
+
+
+// Configure where uploaded agenda files should be saved.
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/agendas");
+  },
+
+  filename: function (req, file, cb) {
+    // Create unique filename to avoid duplicate file name issues.
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+const upload = multer({ storage: storage });
+
+
 
 // SendGrid configuration values from environment variables.
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -304,6 +324,44 @@ router.put("/unable-to-attend/:meetingId/:userId", async function (req, res) {
     });
   }
 });
+
+
+router.post("/new", upload.single("agendaFile"), async function (req, res) {
+  try {
+    // If agenda file is uploaded, save its path.
+    const agendaFilePath = req.file
+      ? `/uploads/agendas/${req.file.filename}`
+      : "";
+
+    const newEvent = await Event.create({
+      sector: req.body.sector,
+      name: req.body.name,
+      venue: req.body.venue,
+      location: req.body.location,
+      time: req.body.time,
+
+      // members comes as string because FormData is used.
+      members: req.body.members ? JSON.parse(req.body.members) : [],
+
+      date: req.body.date,
+
+      // questions also comes as string because FormData is used.
+      questions: req.body.questions ? JSON.parse(req.body.questions) : [],
+
+      // Save agenda file path in database.
+      agendaFile: agendaFilePath,
+    });
+
+    return res.status(201).json(newEvent);
+  } catch (error) {
+    console.error("Error creating event:", error);
+    return res.status(500).json({
+      error: error.message || "Failed to create event",
+    });
+  }
+});
+
+
 
 
 // Export router so main app can use these routes.

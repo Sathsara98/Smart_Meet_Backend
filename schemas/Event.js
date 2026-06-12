@@ -19,6 +19,9 @@ const event = new Schema({
   date: {
     type: String,
   },
+  agendaFile: {
+    type: String,
+  },
 
 });
 
