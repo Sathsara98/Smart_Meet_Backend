@@ -47,6 +47,8 @@ const mongouri = process.env.ATLAS_URI;
 const notificationRoutes = require("./routes/NotificationRoutes");
 app.use("/notifications", notificationRoutes);
 
+app.use("/uploads", express.static("uploads"));
+
 const sendMeetingReminderNotifications = require("./helpers/meetingReminderHelper");
 
 setInterval(() => {
